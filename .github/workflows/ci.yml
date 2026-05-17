@@ -7,7 +7,49 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  # ── Job 1: SDK, verifier, and E2E (no database required) ──────────────────
+  # Fast feedback loop for all cryptographic, adapter, and SDK work.
+  # Runs on every push; completes in ~30s without waiting on Postgres.
+  sdk-and-verifier:
+    name: SDK / Verifier / E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e ".[langchain,dev]"
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v
+
+      - name: Zero-dependency verifier check
+        run: |
+          python3 -m venv /tmp/bare_venv
+          /tmp/bare_venv/bin/pip install -q cryptography py_ecc
+          /tmp/bare_venv/bin/python verifier/agentops_verify.py verifier/test_vectors/valid_session.jsonl
+
+      - name: Verify test vectors
+        run: |
+          python3 verifier/generator.py
+          python3 verifier/agentops_verify.py verifier/test_vectors/valid_session.jsonl
+          python3 verifier/agentops_verify.py verifier/test_vectors/tampered_hash.jsonl && exit 1 || true
+          python3 verifier/agentops_verify.py verifier/test_vectors/sequence_gap.jsonl && exit 1 || true
+          echo "All test vector checks passed"
+
+      - name: Run E2E tests (local authority only)
+        run: pytest tests/e2e/ -v -k "not server_authority"
+
+  # ── Job 2: Integration tests (requires Postgres) ──────────────────────────
+  # Runs in parallel with sdk-and-verifier.
+  # Postgres spins up only for the tests that actually need it.
+  integration:
+    name: Integration (Postgres)
     runs-on: ubuntu-latest
 
     services:
@@ -36,26 +78,7 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[langchain,server,dev]"
 
-      - name: Run unit tests
-        run: pytest tests/unit/ -v
-
-      - name: Zero-dependency verifier check
-        run: |
-          python3 -m venv /tmp/bare_venv
-          /tmp/bare_venv/bin/python verifier/agentops_verify.py verifier/test_vectors/valid_session.jsonl
-
-      - name: Verify test vectors
-        run: |
-          python3 verifier/generator.py
-          python3 verifier/agentops_verify.py verifier/test_vectors/valid_session.jsonl
-          python3 verifier/agentops_verify.py verifier/test_vectors/tampered_hash.jsonl && exit 1 || true
-          python3 verifier/agentops_verify.py verifier/test_vectors/sequence_gap.jsonl && exit 1 || true
-          echo "All test vector checks passed"
-
       - name: Run integration tests
         env:
           AGENTOPS_DATABASE_URL: postgresql+asyncpg://agentops_app:testpassword@localhost:5432/agentops_test
         run: pytest tests/integration/ -v
-
-      - name: Run E2E tests (local authority only)
-        run: pytest tests/e2e/ -v -k "not server_authority"
