@@ -39,7 +39,7 @@ class TestColosseumAuditSession:
             )
             data = json.loads(result.stdout)
             assert data["result"] == "PASS"
-            assert data["evidence_class"] == "NON_AUTHORITATIVE_EVIDENCE"
+            assert data["evidence_class"] == "SIGNED_NON_AUTHORITATIVE_EVIDENCE"
             assert result.returncode == 0
 
     def test_tamper_detected(self):
