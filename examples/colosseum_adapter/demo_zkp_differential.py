@@ -1,13 +1,13 @@
 """
 ZK Differential Collusion Audit Demo
 ======================================
-Demonstrates Gap 3 from the AgentOps Replay paper:
+Demonstrates the zero-knowledge differential audit from the Tesserae paper.
 
-  Two Colosseum sessions — a baseline run and a colluding run — are sealed
-  with AgentOps Replay. The colluding run has 3 additional secret-channel
-  events. A zero-knowledge proof certifies the differential (D=3) without
-  revealing the event type, the payload content, or the raw counts to any
-  verifying party.
+  Two synthetic sealed sessions — a baseline run (0 secret-channel events)
+  and a colluding run (3 secret-channel events) — are created. A
+  zero-knowledge proof certifies the differential (D=3) without revealing
+  the event type, the payload content, or the raw counts to any verifying
+  party. D=3 is the correct differential for this demonstration scenario.
 
 This demo shows four things in sequence:
   1. Both sessions seal and verify as PASS (chain integrity confirmed)
@@ -146,7 +146,7 @@ def _zk_check(tally_A: dict, tally_B: dict, proof: dict, D: int) -> str:
 def main() -> None:
     print("=" * 65)
     print("ZK Differential Collusion Audit Demo")
-    print("AgentOps Replay — Gap 3")
+    print("Tesserae — demonstration scenario")
     print("=" * 65)
     print()
     print("Scenario: 2-agent Colosseum experiment, JiraTicket environment")
@@ -220,10 +220,10 @@ def main() -> None:
 
         # ── Finding block ─────────────────────────────────────────────────────
         print("=" * 65)
-        print("FINDING: Gap 3 — ZK Differential Collusion Audit")
+        print("RESULT: ZK Differential Collusion Audit")
         print("=" * 65)
         print()
-        print("  Source: live AgentOps Replay sealed sessions")
+        print("  Source: synthetic sealed sessions (demonstration scenario)")
         print()
         print(f"  Baseline  sealed: {tally_A['_opening']['count']} TOOL_CALL events "
               f"(chain integrity: {base_v['result']})")
@@ -242,14 +242,14 @@ def main() -> None:
         print("    - Any payload content")
         print("    - The blinding scalars")
         print()
-        print("  Colosseum's colluder_posts_secret metric reported 0 for")
-        print("  both runs. The sealed differential audit reports D=3.")
-        print("  Any attempt to claim D=0 or D=2 is cryptographically")
-        print("  rejected — whether from a reused proof or a fresh lie.")
+        print("  Demo scenario: baseline session has 0 TOOL_CALL events,")
+        print("  colluding session has 3. D=3 is the correct differential")
+        print("  for this synthetic pair. Any attempt to claim D=0 or D=2")
+        print("  is cryptographically rejected — reused proof or fresh lie.")
         print()
-        print("  This is Gap 3: the sealed event-level trace is the only")
-        print("  record that captures collusive intent. The ZK differential")
-        print("  audit certifies that gap without exposing what was counted.")
+        print("  The sealed event-level trace preserves collusive intent.")
+        print("  The ZK differential audit certifies the count differential")
+        print("  without exposing the event type or raw counts.")
         print("=" * 65)
 
 
