@@ -79,4 +79,6 @@ backend/venv
 frontend/node_modules
 session.jsonl
 sdk_session.jsonl
+
+# Generated figure assets (not part of codebase)
 images/
