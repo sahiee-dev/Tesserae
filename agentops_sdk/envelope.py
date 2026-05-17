@@ -2,6 +2,7 @@ import hashlib
 import datetime
 import sys
 import os
+from typing import Optional
 
 # CRITICAL: Import JCS from verifier — the single canonical copy
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'verifier'))
@@ -18,21 +19,28 @@ def build_event(
     session_id: str,
     payload: dict,
     prev_hash: str,
+    private_key: Optional[object] = None,
 ) -> dict:
     """
-    Build a complete event envelope with computed hashes.
+    Build a complete event envelope with computed hashes and optional Ed25519 signature.
 
     This is the single source of truth for event construction.
     The SDK must not construct events by any other means.
 
-    The 7-field envelope (TRD §2.3):
+    The envelope fields (TRD §2.3 + signing extension):
         seq, event_type, session_id, timestamp, payload, prev_hash, event_hash
+        signature  (present only when private_key is supplied)
 
     Hash computation:
-    1. Build event dict WITHOUT event_hash field
+    1. Build event dict WITHOUT event_hash or signature fields
     2. JCS canonicalize (RFC 8785)
-    3. SHA-256 the UTF-8 bytes
-    4. Set event_hash to hex digest
+    3. SHA-256 the UTF-8 bytes → event_hash
+
+    Signature computation (when private_key provided):
+    4. Ed25519.sign(private_key, event_hash.encode('utf-8')) → signature (base64)
+
+    The signature is over event_hash so the verifier only needs the public key
+    and the stored event_hash — no re-canonicalisation required.
     """
     timestamp = _utc_timestamp()
 
@@ -46,6 +54,14 @@ def build_event(
     }
 
     event["event_hash"] = _compute_event_hash(event)
+
+    if private_key is not None:
+        try:
+            from agentops_sdk.signing import sign_event_hash
+            event["signature"] = sign_event_hash(private_key, event["event_hash"])
+        except Exception:
+            pass  # signing failure must never crash the agent
+
     return event
 
 

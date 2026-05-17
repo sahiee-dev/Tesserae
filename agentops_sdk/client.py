@@ -42,6 +42,8 @@ class AgentOpsClient:
         self._finished_session_id: str | None = None
         self._next_seq: int = 1
         self._last_hash: str = GENESIS_HASH
+        self._private_key = None
+        self._public_key_b64: str | None = None
 
     @property
     def session_id(self) -> str | None:
@@ -70,9 +72,20 @@ class AgentOpsClient:
         self._next_seq = 1
         self._last_hash = GENESIS_HASH
 
+        # Generate a fresh Ed25519 keypair for this session.
+        # The public key travels in SESSION_START so the verifier is self-contained.
+        try:
+            from agentops_sdk.signing import generate_keypair
+            self._private_key, self._public_key_b64 = generate_keypair()
+        except Exception:
+            self._private_key = None
+            self._public_key_b64 = None
+
         payload: dict[str, Any] = {
             "agent_id": agent_id or self._agent_id,
         }
+        if self._public_key_b64:
+            payload["sdk_public_key"] = self._public_key_b64
         if metadata:
             payload.update(metadata)
 
@@ -132,6 +145,20 @@ class AgentOpsClient:
         if exit_reason is not None:
             payload["exit_reason"] = exit_reason
 
+        # Compute Merkle root over all events buffered so far (not including SESSION_END).
+        # Root is sealed inside SESSION_END payload, which is then Ed25519-signed.
+        # This gives a compact 32-byte commitment to the entire session that can be
+        # published externally independent of the full JSONL file.
+        try:
+            from agentops_sdk.merkle import compute_merkle_root
+            with self._buffer._lock:
+                buffered = sorted(self._buffer._events, key=lambda e: e.get("seq", 0))
+            hashes = [e["event_hash"] for e in buffered if "event_hash" in e]
+            payload["merkle_root"] = compute_merkle_root(hashes)
+            payload["merkle_leaf_count"] = len(hashes)
+        except Exception:
+            pass  # Merkle failure must never crash the agent
+
         try:
             event = build_event(
                 seq=self._next_seq,
@@ -139,6 +166,7 @@ class AgentOpsClient:
                 session_id=self._session_id,
                 payload=payload,
                 prev_hash=self._last_hash,
+                private_key=self._private_key,
             )
             # Force-append: SESSION_END must always be the last event in the chain
             self._buffer._events.append(event)
@@ -195,6 +223,7 @@ class AgentOpsClient:
                 session_id=self._session_id or "unknown",
                 payload=payload,
                 prev_hash=self._last_hash,
+                private_key=self._private_key,
             )
             pushed = self._buffer.push(event)
             if pushed:
@@ -228,6 +257,7 @@ class AgentOpsClient:
                 session_id=self._session_id or "unknown",
                 payload=payload,
                 prev_hash=self._last_hash,
+                private_key=self._private_key,
             )
             # Force-append: LOG_DROP must land even when buffer is full
             self._buffer._events.append(event)

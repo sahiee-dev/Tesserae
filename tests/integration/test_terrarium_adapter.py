@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 class TestAuditedBlackboardLogger:
 
     def test_basic_session_produces_verifiable_jsonl(self):
-        """Core property: adapter produces PASS NON_AUTHORITATIVE_EVIDENCE."""
+        """Core property: adapter produces PASS SIGNED_NON_AUTHORITATIVE_EVIDENCE."""
         from examples.terrarium_adapter.terrarium_adapter import AuditedBlackboardLogger
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -43,7 +43,8 @@ class TestAuditedBlackboardLogger:
             )
             data = json.loads(result.stdout)
             assert data["result"] == "PASS"
-            assert data["evidence_class"] == "NON_AUTHORITATIVE_EVIDENCE"
+            assert data["evidence_class"] == "SIGNED_NON_AUTHORITATIVE_EVIDENCE"
+            assert data["signatures_valid"] is True
             assert result.returncode == 0
 
     def test_tampered_record_detected(self):

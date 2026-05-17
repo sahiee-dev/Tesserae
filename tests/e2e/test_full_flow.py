@@ -26,7 +26,7 @@ def test_local_authority_mode_end_to_end():
     """
     Full local authority flow:
     AgentOpsClient → record events → flush_to_jsonl → Verifier PASS
-    Evidence class: NON_AUTHORITATIVE_EVIDENCE
+    Evidence class: SIGNED_NON_AUTHORITATIVE_EVIDENCE (Ed25519 per-event sigs)
     """
     with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
         output_path = f.name
@@ -44,7 +44,7 @@ def test_local_authority_mode_end_to_end():
         result = run_verifier_on_file(output_path)
         assert result["returncode"] == 0, f"Verifier failed: {result}"
         assert result["data"]["result"] == "PASS"
-        assert result["data"]["evidence_class"] == "NON_AUTHORITATIVE_EVIDENCE"
+        assert result["data"]["evidence_class"] == "SIGNED_NON_AUTHORITATIVE_EVIDENCE"
 
     finally:
         if os.path.exists(output_path):

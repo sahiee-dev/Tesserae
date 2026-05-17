@@ -136,7 +136,9 @@ def check_sequence_integrity(events: list[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 def _compute_event_hash(event: dict) -> str:
-    event_for_hash = {k: v for k, v in event.items() if k != "event_hash"}
+    # Exclude both event_hash (always) and signature (added after hash is computed).
+    # This ensures old unsigned events and new signed events hash identically.
+    event_for_hash = {k: v for k, v in event.items() if k not in ("event_hash", "signature")}
     canonical_bytes = jcs_canonicalize(event_for_hash)
     return hashlib.sha256(canonical_bytes).hexdigest()
 
@@ -240,10 +242,166 @@ def check_session_completeness(events: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Merkle tree helpers — RFC 6962, inlined for standalone verifier
+# ---------------------------------------------------------------------------
+
+def _merkle_leaf_hash(event_hash_hex: str) -> bytes:
+    """SHA-256(0x00 || raw_event_hash_bytes) — RFC 6962 leaf domain separation."""
+    return hashlib.sha256(b'\x00' + bytes.fromhex(event_hash_hex)).digest()
+
+
+def _merkle_internal_hash(left: bytes, right: bytes) -> bytes:
+    """SHA-256(0x01 || left || right) — RFC 6962 internal node domain separation."""
+    return hashlib.sha256(b'\x01' + left + right).digest()
+
+
+def _merkle_mth(leaves: list[bytes]) -> bytes:
+    """RFC 6962 MTH: recursive Merkle tree hash over leaf digests."""
+    n = len(leaves)
+    if n == 0:
+        return hashlib.sha256(b"").digest()
+    if n == 1:
+        return leaves[0]
+    k = 1 << ((n - 1).bit_length() - 1)  # largest power of 2 < n
+    return _merkle_internal_hash(_merkle_mth(leaves[:k]), _merkle_mth(leaves[k:]))
+
+
+def _compute_merkle_root(event_hashes: list[str]) -> str:
+    """Compute Merkle root over a list of 64-char event_hash hex strings."""
+    if not event_hashes:
+        return hashlib.sha256(b"").hexdigest()
+    leaves = [_merkle_leaf_hash(h) for h in event_hashes]
+    return _merkle_mth(leaves).hex()
+
+
+# ---------------------------------------------------------------------------
+# Ed25519 helper — inlined so verifier stays standalone (no SDK import needed)
+# ---------------------------------------------------------------------------
+
+def _verify_ed25519_signature(public_key_b64: str, event_hash_hex: str, signature_b64: str) -> bool:
+    """
+    Verify an Ed25519 signature over an event_hash.
+    Standalone — requires only the `cryptography` package, not the SDK.
+    """
+    try:
+        import base64
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.exceptions import InvalidSignature
+        public_bytes = base64.b64decode(public_key_b64)
+        public_key = Ed25519PublicKey.from_public_bytes(public_bytes)
+        sig_bytes = base64.b64decode(signature_b64)
+        public_key.verify(sig_bytes, event_hash_hex.encode("utf-8"))
+        return True
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Check 5: Ed25519 signature verification
+# ---------------------------------------------------------------------------
+
+def check_signatures(events: list[dict]) -> dict:
+    """
+    Verify Ed25519 signatures on all events.
+
+    Three outcomes:
+      - "UNSIGNED":  SESSION_START has no sdk_public_key → old format, backwards compat
+      - "PASS":      all events carry valid signatures against SESSION_START public key
+      - "FAIL":      one or more signatures are missing or cryptographically invalid
+
+    The public key is read from SESSION_START payload["sdk_public_key"].
+    """
+    start_events = [e for e in events if e.get("event_type") == "SESSION_START"]
+    if not start_events:
+        return {"status": "UNSIGNED", "reason": "No SESSION_START found", "errors": []}
+
+    public_key_b64 = start_events[0].get("payload", {}).get("sdk_public_key")
+    if not public_key_b64:
+        return {"status": "UNSIGNED", "reason": "No sdk_public_key in SESSION_START", "errors": []}
+
+    errors = []
+    checked = 0
+    for event in sorted(events, key=lambda e: e.get("seq", 0)):
+        sig = event.get("signature")
+        event_hash = event.get("event_hash", "")
+        seq = event.get("seq", "?")
+
+        if sig is None:
+            errors.append(f"seq={seq} ({event.get('event_type')}): missing signature field")
+            continue
+
+        checked += 1
+        if not _verify_ed25519_signature(public_key_b64, event_hash, sig):
+            errors.append(f"seq={seq} ({event.get('event_type')}): invalid Ed25519 signature")
+
+    if errors:
+        return {"status": "FAIL", "checked": checked, "errors": errors}
+
+    return {"status": "PASS", "checked": checked, "errors": []}
+
+
+# ---------------------------------------------------------------------------
+# Check 6: Merkle root verification
+# ---------------------------------------------------------------------------
+
+def check_merkle_root(events: list[dict]) -> dict:
+    """
+    Verify the Merkle root sealed in SESSION_END.
+
+    SESSION_END payload contains:
+      merkle_root:       hex root of RFC 6962 tree over events seq=1..N-1
+      merkle_leaf_count: number of leaves (events before SESSION_END)
+
+    Three outcomes:
+      "ABSENT":  SESSION_END has no merkle_root → old format, backwards compat
+      "PASS":    recomputed root matches stored root
+      "FAIL":    root mismatch (events were added, removed, or reordered)
+    """
+    end_events = [e for e in events if e.get("event_type") == "SESSION_END"]
+    if not end_events:
+        return {"status": "ABSENT", "reason": "No SESSION_END found", "errors": []}
+
+    session_end = end_events[0]
+    stored_root = session_end.get("payload", {}).get("merkle_root")
+    stored_count = session_end.get("payload", {}).get("merkle_leaf_count")
+
+    if stored_root is None:
+        return {"status": "ABSENT", "reason": "No merkle_root in SESSION_END payload", "errors": []}
+
+    # Recompute: all events except SESSION_END, sorted by seq
+    non_end = sorted(
+        [e for e in events if e.get("event_type") != "SESSION_END"],
+        key=lambda e: e.get("seq", 0),
+    )
+    leaf_hashes = [e["event_hash"] for e in non_end if "event_hash" in e]
+    recomputed = _compute_merkle_root(leaf_hashes)
+
+    errors = []
+    if stored_count is not None and stored_count != len(leaf_hashes):
+        errors.append(
+            f"merkle_leaf_count mismatch: stored={stored_count}, recomputed={len(leaf_hashes)}"
+        )
+    if recomputed != stored_root:
+        errors.append(
+            f"merkle_root mismatch: stored={stored_root[:16]}..., recomputed={recomputed[:16]}..."
+        )
+
+    if errors:
+        return {"status": "FAIL", "leaf_count": len(leaf_hashes), "errors": errors}
+
+    return {
+        "status": "PASS",
+        "root": stored_root,
+        "leaf_count": len(leaf_hashes),
+        "errors": [],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Evidence class determination (TRD §3.5)
 # ---------------------------------------------------------------------------
 
-def determine_evidence_class(events: list[dict]) -> str:
+def determine_evidence_class(events: list[dict], signatures_valid: bool = False) -> str:
     has_chain_seal = any(e.get("event_type") == "CHAIN_SEAL" for e in events)
     has_log_drop = any(e.get("event_type") == "LOG_DROP" for e in events)
 
@@ -251,6 +409,8 @@ def determine_evidence_class(events: list[dict]) -> str:
         return "AUTHORITATIVE_EVIDENCE"
     elif has_chain_seal and has_log_drop:
         return "PARTIAL_AUTHORITATIVE_EVIDENCE"
+    elif signatures_valid:
+        return "SIGNED_NON_AUTHORITATIVE_EVIDENCE"
     else:
         return "NON_AUTHORITATIVE_EVIDENCE"
 
@@ -334,17 +494,20 @@ def print_text_output(
     c2_status = c2["status"] if c2 else "FAIL"
     c3_status = c3["status"] if c3 else "FAIL"
 
-    print(f"[1/4] Structural validity ........... {c1_status}")
+    c5 = check_results.get("signatures")
+    c5_status = c5["status"] if c5 else "UNSIGNED"
+
+    print(f"[1/6] Structural validity ........... {c1_status}")
     if c1 and c1["status"] == "FAIL":
         for e in c1["errors"]:
             print(f"      {e}")
 
-    print(f"[2/4] Sequence integrity ............. {c2_status}")
+    print(f"[2/6] Sequence integrity ............. {c2_status}")
     if c2 and c2["status"] == "FAIL":
         for e in c2["errors"]:
             print(f"      {e}")
 
-    print(f"[3/4] Hash chain integrity ........... {c3_status}")
+    print(f"[3/6] Hash chain integrity ........... {c3_status}")
     if c3 and c3["status"] == "FAIL":
         for e in c3["errors"]:
             print(f"      {e}")
@@ -352,13 +515,40 @@ def print_text_output(
     # Check 4 is skipped if earlier checks failed
     earlier_failed = c1_status == "FAIL" or c2_status == "FAIL" or c3_status == "FAIL"
     if earlier_failed:
-        print("[4/4] Session completeness .......... (skipped — earlier check failed)")
+        print("[4/6] Session completeness .......... (skipped — earlier check failed)")
     else:
         c4_status = c4["status"] if c4 else "FAIL"
-        print(f"[4/4] Session completeness ........... {c4_status}")
+        print(f"[4/6] Session completeness ........... {c4_status}")
         if c4 and c4["status"] == "FAIL":
             for e in c4["errors"]:
                 print(f"      {e}")
+
+    # Check 5: Ed25519 signatures (always runs, UNSIGNED is not a failure)
+    if c5_status == "PASS":
+        checked = c5.get("checked", "?")
+        print(f"[5/6] Ed25519 signatures ............. PASS ({checked} events signed)")
+    elif c5_status == "FAIL":
+        print(f"[5/6] Ed25519 signatures ............. FAIL")
+        if c5:
+            for e in c5["errors"]:
+                print(f"      {e}")
+    else:
+        print(f"[5/6] Ed25519 signatures ............. UNSIGNED (hash chain only)")
+
+    # Check 6: Merkle root (always runs, ABSENT is not a failure)
+    c6 = check_results.get("merkle")
+    c6_status = c6["status"] if c6 else "ABSENT"
+    if c6_status == "PASS":
+        root_short = c6.get("root", "")[:16]
+        n = c6.get("leaf_count", "?")
+        print(f"[6/6] Merkle root (RFC 6962) ......... PASS (root={root_short}... leaves={n})")
+    elif c6_status == "FAIL":
+        print(f"[6/6] Merkle root (RFC 6962) ......... FAIL")
+        if c6:
+            for e in c6["errors"]:
+                print(f"      {e}")
+    else:
+        print(f"[6/6] Merkle root (RFC 6962) ......... ABSENT (no root in SESSION_END)")
 
     # Show trust assumptions when verbose or evidence is authoritative
     show_trust = verbose or evidence_class in (
@@ -402,11 +592,19 @@ def build_json_output(
         "evidence_class": evidence_class,
         "result": overall,
         "hmac_verified": hmac_verified,
+        "signatures_valid": check_results.get("signatures", {}).get("status") == "PASS",
+        "merkle_valid": check_results.get("merkle", {}).get("status") == "PASS",
+        "merkle_root": (
+            check_results.get("merkle", {}).get("root")
+            if check_results.get("merkle", {}).get("status") == "PASS" else None
+        ),
         "checks": {
             "structural_validity": check_results.get("structural"),
             "sequence_integrity": check_results.get("sequence"),
             "hash_chain_integrity": check_results.get("hash_chain"),
             "session_completeness": check_results.get("completeness"),
+            "ed25519_signatures": check_results.get("signatures"),
+            "merkle_root": check_results.get("merkle"),
         },
         "trust_assumptions": trust_assumptions,
         "errors": errors,
@@ -496,7 +694,7 @@ def main() -> None:
         c4 = {"status": "FAIL", "errors": ["skipped"]}
         check_results["completeness"] = None  # type: ignore[assignment]
 
-    # Determine overall result
+    # Determine overall result from checks 1-4
     all_passed = all(
         check_results.get(k, {}).get("status") == "PASS"
         for k in ["structural", "sequence", "hash_chain", "completeness"]
@@ -504,8 +702,27 @@ def main() -> None:
     )
     overall = "PASS" if all_passed else "FAIL"
 
+    # Check 5: Ed25519 signatures (independent of chain checks — runs regardless)
+    c5 = check_signatures(events)
+    check_results["signatures"] = c5
+    signatures_valid = (c5["status"] == "PASS")
+    if c5["status"] == "FAIL":
+        all_errors.extend(c5["errors"])
+        overall = "FAIL"
+
+    # Check 6: Merkle root (independent — runs regardless)
+    c6 = check_merkle_root(events)
+    check_results["merkle"] = c6
+    merkle_valid = (c6["status"] == "PASS")
+    if c6["status"] == "FAIL":
+        all_errors.extend(c6["errors"])
+        overall = "FAIL"
+
     # Evidence class only determinable on PASS
-    evidence_class: str | None = determine_evidence_class(events) if overall == "PASS" else None
+    evidence_class: str | None = (
+        determine_evidence_class(events, signatures_valid=signatures_valid)
+        if overall == "PASS" else None
+    )
 
     # HMAC verification
     hmac_key_provided = bool(args.hmac_key)
@@ -516,7 +733,10 @@ def main() -> None:
 
     # Build trust assumptions (always present)
     ta = build_trust_assumptions(
-        events, hmac_verified, hmac_key_provided, evidence_class or ""
+        events, hmac_verified, hmac_key_provided,
+        evidence_class or "",
+        signatures_valid=signatures_valid,
+        merkle_valid=merkle_valid,
     )
 
     if args.format == "json":
