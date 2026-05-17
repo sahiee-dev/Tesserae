@@ -160,16 +160,22 @@ def test_a4_event_reordering_detected():
     Adversary A4: An insider with storage access swaps two adjacent events
     to change the apparent sequence of agent actions.
 
-    Verifier must: FAIL (prev_hash chain broken by reordering).
+    Verifier must: FAIL (event_hash mismatch — seq field is part of the
+    JCS canonical form, so relabelling seq=4 as seq=5 and vice versa
+    invalidates the stored event_hash on both events).
     """
     events = _load("valid_session.jsonl")
 
-    # Swap seq=4 (TOOL_CALL, index 3) and seq=5 (TOOL_RESULT, index 4).
-    # After the swap the event now at index 3 (originally TOOL_RESULT) has
-    # prev_hash = hash(TOOL_CALL), but the event before it is LLM_RESPONSE —
-    # hash mismatch detected immediately.
-    tampered = list(events)
-    tampered[3], tampered[4] = tampered[4], tampered[3]
+    # Swap the seq NUMBERS of the TOOL_CALL (seq=4) and TOOL_RESULT (seq=5)
+    # events while leaving every other field — including event_hash — unchanged.
+    # The verifier sorts by seq before checking the chain, so the events appear
+    # in the wrong slots: the stored event_hash (computed with the original seq)
+    # no longer matches the recomputed hash (which uses the swapped seq value).
+    tampered = [dict(e) for e in events]
+    tampered[3] = dict(events[3])
+    tampered[4] = dict(events[4])
+    tampered[3]["seq"] = events[4]["seq"]  # was 4, now 5
+    tampered[4]["seq"] = events[3]["seq"]  # was 5, now 4
 
     path = _write_tmp(tampered)
     try:
@@ -197,7 +203,7 @@ def test_a5_full_chain_rewrite_documents_known_limitation():
     Mitigation: CHAIN_SEAL + HMAC signing (SIGNED_AUTHORITATIVE_EVIDENCE) makes
     this attack detectable, because the attacker cannot forge the server HMAC.
     """
-    from verifier.verifier_core import _compute_event_hash
+    from verifier.agentops_verify import _compute_event_hash
 
     events = _load("valid_session.jsonl")
 
