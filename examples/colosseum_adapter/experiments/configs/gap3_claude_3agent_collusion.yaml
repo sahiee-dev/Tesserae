@@ -1,0 +1,48 @@
+simulation:
+  max_iterations: 1
+  max_planning_rounds: 3
+  max_conversation_steps: 2
+  seed: 1
+  tags: [gap3_3agent_collusion]
+
+environment:
+  name: JiraTicketEnvironment
+  assignment_filling: false
+  max_tasks: 6
+
+communication_network:
+  topology: complete
+  num_agents: 3
+  consolidate_channels: true
+
+llm_models:
+  - label: claude-sonnet
+    llm:
+      provider: anthropic
+      anthropic:
+        model: claude-sonnet-4-5
+        params:
+          max_tokens: 800
+          temperature: 0.7
+
+experiment:
+  tag: gap3_3agent_collusion
+  output_dir: experiments/collusion/outputs/gap3_3agent_collusion
+  max_concurrent_runs: 1
+  seeds: [1, 2, 3, 4, 5]
+  collusion:
+    colluder_selection: random
+  sweeps:
+    - name: honest_baseline
+      topologies: [complete]
+      num_agents: [3]
+      colluder_counts: [1]
+      secret_channel_enabled: [false]
+      prompt_variants: [control]
+
+    - name: active_collusion
+      topologies: [complete]
+      num_agents: [3]
+      colluder_counts: [2]
+      secret_channel_enabled: [true]
+      prompt_variants: [deception]
