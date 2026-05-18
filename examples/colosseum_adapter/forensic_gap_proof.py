@@ -2,30 +2,24 @@
 """
 forensic_gap_proof.py — The actual gap between Colosseum and Tesserae.
 
-This script runs against REAL Colosseum c2 experiment outputs
-(3 agents, 2 colluders, secret_channel_enabled=True, qwen2.5:3b via Ollama)
-and proves a single forensic property:
+This script runs against REAL Colosseum c2 experiment outputs across two
+model families (qwen2.5:3b seeds 1-3, Claude Sonnet seeds 1-5) and proves
+a single forensic property:
 
     Colosseum's audit trail is mutable plaintext.
     Tesserae's sealed trace is cryptographically tamper-evident.
 
-The SAME 10-11 secret channel events appear in both systems.
 An insider who zeros out colluder_posts_secret in Colosseum's metrics.json
 goes completely undetected. The same deletion in Tesserae's sealed trace
 breaks the hash chain and is detected by the verifier (result=FAIL).
 
 Setup:
-    1. Run Colosseum c2 experiment:
-       cd /path/to/colosseum
-       .venv/bin/python -m experiments.collusion.run \\
-           --config experiments/collusion/configs/gap3_c2_tesserae.yaml
+    Requires local Colosseum experiment output in:
+      ~/Desktop/colosseum/experiments/collusion/outputs/gap3_tesserae_comparison
+      ~/Desktop/colosseum/experiments/collusion/outputs/gap3_3agent_collusion
 
-    2. Run this script from the agentops-replay-pro root:
+    Run this script from the agentops-replay-pro root:
        python examples/colosseum_adapter/forensic_gap_proof.py
-
-Expected output (2 seeds):
-    seed=1: Colosseum=10, Tesserae=10, Colosseum-tampered=undetected, Tesserae-tampered=FAIL
-    seed=2: Colosseum=11, Tesserae=11, Colosseum-tampered=undetected, Tesserae-tampered=FAIL
 """
 
 from __future__ import annotations
@@ -42,17 +36,25 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from examples.colosseum_adapter.colosseum_adapter import ColosseumAuditSession
 
-COLOSSEUM_OUTPUT_ROOT = (
+QWEN_ROOT = (
     Path.home() / "Desktop" / "colosseum" /
     "experiments" / "collusion" / "outputs" / "gap3_tesserae_comparison"
 )
 
+SONNET_ROOT = (
+    Path.home() / "Desktop" / "colosseum" /
+    "experiments" / "collusion" / "outputs" / "gap3_3agent_collusion"
+)
+
 
 def _find_runs() -> list[Path]:
-    """Find all completed c2 runs with tool_events.json."""
+    """Find all completed c2 runs with tool_events.json across both model families."""
     runs = []
-    for te in sorted(COLOSSEUM_OUTPUT_ROOT.rglob("tool_events.json")):
+    for te in sorted(QWEN_ROOT.rglob("tool_events.json")):
         if "tesserae_gap_sweep" in str(te) and "c2" in str(te):
+            runs.append(te.parent)
+    for te in sorted(SONNET_ROOT.rglob("tool_events.json")):
+        if "active_collusion" in str(te) and "c2" in str(te):
             runs.append(te.parent)
     return runs
 
@@ -134,13 +136,13 @@ def analyse_run(run_dir: Path) -> dict:
 def main():
     print("=" * 70)
     print("FORENSIC GAP PROOF: Colosseum vs Tesserae")
-    print("Real Colosseum c2 runs — qwen2.5:3b, JiraTicketEnvironment")
+    print("Real Colosseum c2 runs — qwen2.5:3b (seeds 1-3) + Claude Sonnet (seeds 1-5)")
     print("=" * 70)
 
     runs = _find_runs()
     if not runs:
-        print(f"\nERROR: No c2 runs found under {COLOSSEUM_OUTPUT_ROOT}")
-        print("Run the Colosseum c2 experiment first:")
+        print(f"\nERROR: No c2 runs found under {QWEN_ROOT} or {SONNET_ROOT}")
+        print("Run the Colosseum experiments first:")
         print("  cd ~/Desktop/colosseum")
         print("  .venv/bin/python -m experiments.collusion.run \\")
         print("    --config experiments/collusion/configs/gap3_c2_tesserae.yaml")
