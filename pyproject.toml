@@ -20,9 +20,10 @@ classifiers = [
     "Topic :: Security",
 ]
 
-# Core SDK + Verifier: cryptography for Ed25519 signing
+# Core SDK + Verifier: cryptography for Ed25519 signing, py_ecc for ZKP BN128
 dependencies = [
     "cryptography>=40.0",
+    "py_ecc>=6.0.0",
 ]
 
 [project.optional-dependencies]
