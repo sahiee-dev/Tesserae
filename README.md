@@ -8,9 +8,9 @@ AgentOps Replay captures every agent action into a tamper-evident, hash-chained 
 
 ## Who This Is For
 
-**[Enterprise Security](#for-enterprise-security)**, Forensic-grade audit trails that satisfy EU AI Act Article 12, ISO/IEC 42001 non-repudiation, and NIST SP 800-86 integrity requirements. An open verifier any regulator can run.
+**[Enterprise Security](#for-enterprise-security)**: Forensic-grade audit trails that satisfy EU AI Act Article 12, ISO/IEC 42001 non-repudiation, and NIST SP 800-86 integrity requirements. An open verifier any regulator can run.
 
-**[OpenClaw / Self-Hosted AI Users](#for-openclaw-and-self-hosted-ai-users)**, Your agent has access to your files, email, shell, and financial accounts. Prove what it actually did. Nothing leaves your machine.
+**[OpenClaw / Self-Hosted AI Users](#for-openclaw-and-self-hosted-ai-users)**: Your agent has access to your files, email, shell, and financial accounts. Prove what it actually did. Nothing leaves your machine.
 
 ---
 
