@@ -68,7 +68,7 @@ Evidence    : SIGNED_NON_AUTHORITATIVE_EVIDENCE
 [5/6] Ed25519 signatures ............. PASS (6 events signed)
 [6/6] Merkle root (RFC 6962) ......... PASS (root=a3f2c1... leaves=5)
 
-Result: PASS ✅
+Result: PASS 
 ```
 
 **Requirements:** Python 3.11+ (required for JCS float serialization determinism). Install `cryptography` for Ed25519 signing (`pip install cryptography`); without it the chain is hash-only and evidence class is `NON_AUTHORITATIVE_EVIDENCE`.
@@ -156,11 +156,11 @@ python examples/terrarium_adapter/demo_tamper_detection.py
 
 ```
 Step 2: Verify original audit record:
-  Result:         ✅ PASS
+  Result:          PASS
   Evidence class: SIGNED_NON_AUTHORITATIVE_EVIDENCE
 
 Step 4: Verify tampered record:
-  Result:         ❌ FAIL
+  Result:          FAIL
   Failed check:   [3/6] Hash chain integrity (seq=3)
 ```
 
@@ -332,7 +332,7 @@ For users who want the strongest possible guarantee:
 docker-compose -f backend/docker-compose.yml up -d
 # Configure server_url in your AgentOps settings
 agentops-verify session.jsonl
-# Result: PASS ✅  Evidence: AUTHORITATIVE_EVIDENCE
+# Result: PASS  Evidence: AUTHORITATIVE_EVIDENCE
 ```
 
 The Ingestion Service runs locally on your machine. Nothing goes to any external server.
