@@ -20,20 +20,22 @@ AgentOps Replay captures every agent action into a tamper-evident, hash-chained 
 Agent Process (Untrusted)
     AgentOps SDK
     ├── JCS + SHA-256 hash chain per event (RFC 8785)
-    ├── Ed25519 per-event signatures (session-scoped, never written to disk)
-    ├── LOG_DROP on capture failure — explicit, signed, not silent
+    ├── Ed25519 per-event signature over each event hash (session-scoped keypair, never persisted)
+    ├── RFC 6962 Merkle root sealed in SESSION_END — compact commitment to the full chain
+    ├── LOG_DROP on capture failure — explicit, signed, sequenced, not silent
     └── Local JSONL  ──or──  HTTP → Ingestion Service
                                           │
                                 Separate process (server authority)
                                 ├── Independent hash recomputation
                                 ├── Ed25519 signature verification
                                 ├── Append-only PostgreSQL (INSERT only)
-                                └── RFC 6962 Merkle commitment → CHAIN_SEAL
+                                └── HMAC-SHA256 + Merkle commitment → CHAIN_SEAL
                                           │
                                 Standalone Verifier (trusts nothing)
-                                ├── Six integrity checks
-                                ├── Evidence class determination
-                                └── trust_assumptions block — honest about limits
+                                ├── Six checks: structural, sequence, hash chain,
+                                │   completeness, Ed25519, Merkle root
+                                ├── Evidence class determination (four classes)
+                                └── trust_assumptions block — hardcoded, not configurable
 ```
 
 Each zone is an independent process. The Verifier shares no code or runtime state with the SDK or Ingestion Service.
@@ -45,7 +47,7 @@ Each zone is an independent process. The Verifier shares no code or runtime stat
 ```bash
 git clone https://github.com/sahiee-dev/Agentops-replay.git
 cd Agentops-replay
-pip install -e .
+pip install -e ".[dev]"
 
 python examples/sdk_demo.py
 agentops-verify session.jsonl
@@ -57,17 +59,19 @@ AgentOps Replay Verifier v1.0
 File        : session.jsonl
 Session ID  : <uuid>
 Events      : 6
-Evidence    : NON_AUTHORITATIVE_EVIDENCE
+Evidence    : SIGNED_NON_AUTHORITATIVE_EVIDENCE
 
-[1/4] Structural validity ........... PASS
-[2/4] Sequence integrity ............. PASS
-[3/4] Hash chain integrity ........... PASS
-[4/4] Session completeness ........... PASS
+[1/6] Structural validity ........... PASS
+[2/6] Sequence integrity ............. PASS
+[3/6] Hash chain integrity ........... PASS
+[4/6] Session completeness ........... PASS
+[5/6] Ed25519 signatures ............. PASS (6 events signed)
+[6/6] Merkle root (RFC 6962) ......... PASS (root=a3f2c1... leaves=5)
 
 Result: PASS ✅
 ```
 
-**Requirements:** Python 3.11+ (required for JCS float serialization determinism)
+**Requirements:** Python 3.11+ (required for JCS float serialization determinism). Install `cryptography` for Ed25519 signing (`pip install cryptography`); without it the chain is hash-only and evidence class is `NON_AUTHORITATIVE_EVIDENCE`.
 
 ---
 
@@ -75,13 +79,12 @@ Result: PASS ✅
 
 | Class | What It Requires | What It Proves |
 |---|---|---|
-| `SIGNED_AUTHORITATIVE_EVIDENCE` | CHAIN_SEAL + HMAC-SHA256 + Merkle root + no LOG_DROP | Highest. Server identity attested. Full chain rewrite detected. |
-| `AUTHORITATIVE_EVIDENCE` | CHAIN_SEAL present + no LOG_DROP | Server independently verified the full chain. Complete and sealed. |
+| `AUTHORITATIVE_EVIDENCE` | CHAIN_SEAL + no LOG_DROP | Independent server verified the full chain. Sealed and complete. |
 | `PARTIAL_AUTHORITATIVE_EVIDENCE` | CHAIN_SEAL + LOG_DROP present | Server-verified. Gaps are explicit, sequenced, signed — not silent. |
-| `SIGNED_NON_AUTHORITATIVE_EVIDENCE` | Ed25519 signatures valid, no CHAIN_SEAL | Chain rewrite detected locally. No independent server witness. |
-| `NON_AUTHORITATIVE_EVIDENCE` | Local mode only | Hash integrity verified. Tamper-evident but self-reported. |
+| `SIGNED_NON_AUTHORITATIVE_EVIDENCE` | Ed25519 signatures valid, no CHAIN_SEAL | Full chain rewrite detected locally. No independent server witness. |
+| `NON_AUTHORITATIVE_EVIDENCE` | Local mode, no signatures | Hash integrity verified. Tamper-evident but self-reported. |
 
-Every verifier output includes a `trust_assumptions` block — hardcoded, not configurable — that records `byzantine_server_defended: false`, `session_freshness_verified: false`, `instrumentation_complete: "unknown"`. A system that does not know its limits is not a trustworthy audit tool.
+Every verifier output includes a `trust_assumptions` block — hardcoded, not configurable — that records what was and was not verified: `byzantine_server_defended: false`, `session_freshness_verified: false`, `instrumentation_complete: "unknown"`. A system that does not know its limits is not a trustworthy audit tool.
 
 ---
 
@@ -110,28 +113,40 @@ Agent evaluation frameworks depend on log integrity. If the evidence of agent be
 A direct inspection of [Terrarium](https://arxiv.org/abs/2510.14312) (Nakamura et al., 2025) — the multi-agent simulation framework underlying [Colosseum](https://arxiv.org/abs/2602.15198) (Nakamura et al., 2026) — confirms:
 
 ```bash
-grep -rn "hashlib|sha256|md5|integrity|tamper|verify|sign" terrarium/src/
+grep -rn "hashlib\|sha256\|md5\|integrity\|tamper\|verify\|sign" terrarium/src/
 # Zero cryptographic results across all seven log file types.
 ```
 
-All blackboard state snapshots, tool call records, prompt logs, agent trajectories, attack events, attack summaries, and experiment notes are written with standard Python file I/O. Any file can be modified by any filesystem-level actor without detection.
+All seven Terrarium artifact types — `tool_calls.json`, `agent_prompts.json`, `blackboard_{id}.txt`, `attack_events.jsonl`, `attack_summary.json`, `attack_events.log`, `experiment_note.txt` — are written with standard `f.write()` / `json.dump()`. Any file can be silently modified by any filesystem-level actor.
 
-A live Colosseum experiment made this concrete: Colosseum's `metrics.json` field `colluder_posts_secret` reported **zero** secret-channel attempts for both the baseline and colluding runs. The AgentOps Replay sealed trace recorded **three** distinct secret-channel tool invocations in the colluding run and zero in the baseline. The aggregate metric was wrong. The event-level trace was right.
+### Forensic Gap — Proven on 14 Real Colosseum Runs
 
-```
-Native metrics.json — both runs:
-  colluder_posts_secret: 0
+`forensic_gap_proof.py` runs the A3 attack (storage-level deletion) against real Colosseum c2 experiment output — 9 qwen2.5:3b runs (seeds 1–3 × 3 batches) and 5 Claude Sonnet active-collusion runs (seeds 1–5). It replays each run through `ColosseumAuditSession` to produce a sealed Tesserae trace, then deletes the secret-channel events from both the Colosseum `metrics.json` and the sealed JSONL.
 
-Sealed AgentOps Replay trace (colluding run):
-  TOOL_CALL [event_type=secret_channel]  seq=4
-  TOOL_CALL [event_type=secret_channel]  seq=7
-  TOOL_CALL [event_type=secret_channel]  seq=11
-
-Delta: +3 secret-channel events. Native log: undetectable deletion.
-Sealed log: immediate FAIL at hash chain integrity check.
+```bash
+python examples/colosseum_adapter/forensic_gap_proof.py
 ```
 
-### Terrarium Integration
+```
+  Seed 1 (qwen2.5:3b):
+    Colosseum   colluder_posts_secret=10  → zeroed silently → undetected
+    Tesserae    10 events sealed, original: PASS
+    Attack on Colosseum metrics.json      → undetected
+    Attack on Tesserae sealed trace       → FAIL ← DETECTED
+
+  ...
+
+  14 runs. Colosseum: 0 detections. Tesserae: 14/14 detected.
+
+  Three checks fire on every deletion:
+    [2/6] Sequence integrity — missing sequence numbers
+    [3/6] Hash chain — prev_hash breaks at deletion point
+    [6/6] Merkle root — sealed root no longer matches event set
+```
+
+Results are written to `examples/colosseum_adapter/forensic_gap_results.json`.
+
+### Terrarium Adapter
 
 `AuditedBlackboardLogger` is a 50-line drop-in subclass of Terrarium's `BlackboardLogger`. Zero changes to Terrarium source required.
 
@@ -142,39 +157,58 @@ python examples/terrarium_adapter/demo_tamper_detection.py
 ```
 Step 2 — Verify original audit record:
   Result:         ✅ PASS
-  Evidence class: NON_AUTHORITATIVE_EVIDENCE
+  Evidence class: SIGNED_NON_AUTHORITATIVE_EVIDENCE
 
 Step 4 — Verify tampered record:
   Result:         ❌ FAIL
-  Failed check:   [3/4] Hash chain integrity (seq=3)
+  Failed check:   [3/6] Hash chain integrity (seq=3)
 ```
 
-### Colosseum Integration and Differential Audit
+### Colosseum Adapter and Differential Audit
 
-`ColosseumAuditSession` wraps a Colosseum experiment with AgentOps Replay instrumentation. The Colosseum experiment — agents, attack modules, regret computation — requires no modification.
+`ColosseumAuditSession` wraps a Colosseum experiment with Tesserae instrumentation. The Colosseum experiment — agents, attack modules, regret computation — requires no modification.
 
 ```bash
-# Three-step proof: PASS → FAIL → native undetected
+# PASS → FAIL demonstration
 python examples/colosseum_adapter/demo_evidence_gap.py
 
 # Differential audit: compare two sealed sessions without exposing payloads
 python examples/colosseum_adapter/gap3_differential_audit.py
+
+# Full 14-run forensic proof against real Colosseum output
+python examples/colosseum_adapter/forensic_gap_proof.py
 ```
+
+### Zero-Knowledge Differential Audit
+
+The ZK module (`agentops_sdk/zkp_differential.py`) lets an auditor certify that one session's collusion-event count exceeds another's by a stated delta — without revealing raw counts, event types, or payloads. Based on Pedersen commitments over BN128 and a Fiat-Shamir Schnorr proof.
+
+```python
+from agentops_sdk import commit_session_count, prove_differential, verify_differential
+
+c_a = commit_session_count(count_a, blinding_a)
+c_b = commit_session_count(count_b, blinding_b)
+proof = prove_differential(count_a, blinding_a, count_b, blinding_b, delta)
+assert verify_differential(c_a, c_b, delta, proof)
+```
+
+Proof transcripts differ each run (blinding uses `secrets.randbelow`) — the result is reproducible, not deterministic. Stand-alone demo: `examples/colosseum_adapter/gap3_differential_audit.py`.
 
 ### Companion Paper
 
 > Shaik Ahamed Sahir. *AgentOps Replay: Tamper-Evident Behavioral Sequence Integrity for Multi-Agent Systems.* arXiv, 2026.
 > [Link — added after arXiv submission]
 
-The paper formalizes four gap types in Terrarium (T-1 through T-4), three in Colosseum (C-1 through C-3), five evidence classes with trust assumption tables, five adversary evaluations, and LOG_DROP semantics. All 37 adversarial tests are deterministic and require only Python 3.11 stdlib.
+The paper formalizes four gap types in Terrarium (T-1 through T-4), three in Colosseum (C-1 through C-3), four evidence classes with trust assumption tables, five adversary evaluations, LOG_DROP semantics, and the ZK differential audit construction.
 
 ### Running the Test Suite
 
 ```bash
-pip install -e ".[langchain,server,dev]"
+pip install -e ".[dev]"
+pip install cryptography py_ecc   # for Ed25519 + ZK tests
 
-pytest tests/unit/ -v                  # No external dependencies
-pytest tests/adversarial/ -v           # A1–A5, all 37 tests
+pytest tests/unit/ -v             # No external dependencies
+pytest tests/adversarial/ -v      # A1–A5, all adversarial tests
 
 python verifier/generator.py
 agentops-verify verifier/test_vectors/valid_session.jsonl     # exit 0
@@ -315,11 +349,12 @@ NVIDIA's NemoClaw adds policy-based guardrails to OpenClaw (what the agent is *a
 
 | Component | Path | Description |
 |---|---|---|
-| Core SDK | `agentops_sdk/` | Hash chain, Ed25519 signing, LOG_DROP, local JSONL or HTTP send |
-| Verifier | `verifier/` | Zero-dependency CLI. Six checks. Evidence class. trust_assumptions. |
-| Ingestion Service | `backend/` | FastAPI + PostgreSQL. Independent hash recomputation. Merkle seal. |
+| Core SDK | `agentops_sdk/` | Hash chain, Ed25519 signing, Merkle root, LOG_DROP, local JSONL or HTTP send |
+| ZK Differential Audit | `agentops_sdk/zkp_differential.py` | Pedersen commitments + Fiat-Shamir Schnorr proof. Certifies count deltas without revealing payloads. |
+| Verifier | `verifier/` | Zero-dependency standalone CLI. Six checks. Four evidence classes. trust_assumptions. |
+| Ingestion Service | `backend/` | FastAPI + PostgreSQL. Independent hash recomputation. HMAC + Merkle seal (CHAIN_SEAL). |
 | Terrarium Adapter | `examples/terrarium_adapter/` | Drop-in AuditedBlackboardLogger. 50 lines. No Terrarium source changes. |
-| Colosseum Adapter | `examples/colosseum_adapter/` | ColosseumAuditSession. Differential audit. metrics.json discrepancy demo. |
+| Colosseum Adapter | `examples/colosseum_adapter/` | ColosseumAuditSession. 14-run forensic gap proof. ZK differential audit demo. |
 | LangChain Integration | `sdk/python/` | AgentOpsCallbackHandler. Zero config. Content hashed at callback boundary. |
 
 ## Documentation
@@ -336,4 +371,4 @@ Apache 2.0 — See [LICENSE](LICENSE)
 
 ---
 
-> **Note on naming:** This project is currently named AgentOps Replay for continuity with a prior published system (Sahir, IEEE 2026) and active external links. A rename to **Tessera** is planned once link dependencies resolve. The name better reflects the system's actual function — cryptographic chain-of-custody and tamper-evident audit — rather than session replay, which was the focus of the v1 system. GitHub will redirect automatically when the rename happens.
+> **Note on naming:** This project is currently named AgentOps Replay for continuity with a prior published system (Sahir, IEEE 2026) and active external links. A rename to **Tesserae** is planned once link dependencies resolve. The name better reflects the system's actual function — cryptographic chain-of-custody and tamper-evident audit — rather than session replay, which was the focus of the v1 system. GitHub will redirect automatically when the rename happens.
