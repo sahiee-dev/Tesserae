@@ -2,15 +2,15 @@
 
 **Cryptographic chain-of-custody for AI agent sessions.**
 
-AgentOps Replay captures every agent action into a tamper-evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified — by anyone, at any time — without trusting any vendor, including us.
+AgentOps Replay captures every agent action into a tamper-evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified, by anyone, at any time, without trusting any vendor, including us.
 
 ---
 
 ## Who This Is For
 
-**[Enterprise Security](#for-enterprise-security)** — Forensic-grade audit trails that satisfy EU AI Act Article 12, ISO/IEC 42001 non-repudiation, and NIST SP 800-86 integrity requirements. An open verifier any regulator can run.
+**[Enterprise Security](#for-enterprise-security)**, Forensic-grade audit trails that satisfy EU AI Act Article 12, ISO/IEC 42001 non-repudiation, and NIST SP 800-86 integrity requirements. An open verifier any regulator can run.
 
-**[OpenClaw / Self-Hosted AI Users](#for-openclaw-and-self-hosted-ai-users)** — Your agent has access to your files, email, shell, and financial accounts. Prove what it actually did. Nothing leaves your machine.
+**[OpenClaw / Self-Hosted AI Users](#for-openclaw-and-self-hosted-ai-users)**, Your agent has access to your files, email, shell, and financial accounts. Prove what it actually did. Nothing leaves your machine.
 
 ---
 
@@ -21,8 +21,8 @@ Agent Process (Untrusted)
     AgentOps SDK
     ├── JCS + SHA-256 hash chain per event (RFC 8785)
     ├── Ed25519 per-event signature over each event hash (session-scoped keypair, never persisted)
-    ├── RFC 6962 Merkle root sealed in SESSION_END — compact commitment to the full chain
-    ├── LOG_DROP on capture failure — explicit, signed, sequenced, not silent
+    ├── RFC 6962 Merkle root sealed in SESSION_END, compact commitment to the full chain
+    ├── LOG_DROP on capture failure, explicit, signed, sequenced, not silent
     └── Local JSONL  ──or──  HTTP → Ingestion Service
                                           │
                                 Separate process (server authority)
@@ -35,14 +35,14 @@ Agent Process (Untrusted)
                                 ├── Six checks: structural, sequence, hash chain,
                                 │   completeness, Ed25519, Merkle root
                                 ├── Evidence class determination (four classes)
-                                └── trust_assumptions block — hardcoded, not configurable
+                                └── trust_assumptions block, hardcoded, not configurable
 ```
 
 Each zone is an independent process. The Verifier shares no code or runtime state with the SDK or Ingestion Service.
 
 ---
 
-## Quickstart — PASS in 5 minutes
+## Quickstart : PASS in 5 minutes
 
 ```bash
 git clone https://github.com/sahiee-dev/Agentops-replay.git
@@ -84,7 +84,7 @@ Result: PASS ✅
 | `SIGNED_NON_AUTHORITATIVE_EVIDENCE` | Ed25519 signatures valid, no CHAIN_SEAL | Full chain rewrite detected locally. No independent server witness. |
 | `NON_AUTHORITATIVE_EVIDENCE` | Local mode, no signatures | Hash integrity verified. Tamper-evident but self-reported. |
 
-Every verifier output includes a `trust_assumptions` block — hardcoded, not configurable — that records what was and was not verified: `byzantine_server_defended: false`, `session_freshness_verified: false`, `instrumentation_complete: "unknown"`. A system that does not know its limits is not a trustworthy audit tool.
+Every verifier output includes a `trust_assumptions` block, hardcoded, not configurable, that records what was and was not verified: `byzantine_server_defended: false`, `session_freshness_verified: false`, `instrumentation_complete: "unknown"`. A system that does not know its limits is not a trustworthy audit tool.
 
 ---
 
@@ -98,7 +98,7 @@ Every verifier output includes a `trust_assumptions` block — hardcoded, not co
 | A4 | Insider reorders events | Detected | Detected | Detected |
 | A5 | Full chain rewrite | **Not detected†** | Detected | Detected |
 
-† Known boundary — documented in `docs/TRUST_MODEL.md §4.5` and recorded in every session's `trust_assumptions` output. All 37 adversarial tests pass on CI.
+† Known boundary: documented in `docs/TRUST_MODEL.md §4.5` and recorded in every session's `trust_assumptions` output. All 37 adversarial tests pass on CI.
 
 ---
 
@@ -110,18 +110,18 @@ Every verifier output includes a `trust_assumptions` block — hardcoded, not co
 
 Agent evaluation frameworks depend on log integrity. If the evidence of agent behavior can be silently modified after capture, safety claims over that evidence are unenforceable.
 
-A direct inspection of [Terrarium](https://arxiv.org/abs/2510.14312) (Nakamura et al., 2025) — the multi-agent simulation framework underlying [Colosseum](https://arxiv.org/abs/2602.15198) (Nakamura et al., 2026) — confirms:
+A direct inspection of [Terrarium](https://arxiv.org/abs/2510.14312) (Nakamura et al., 2025), the multi-agent simulation framework underlying [Colosseum](https://arxiv.org/abs/2602.15198) (Nakamura et al., 2026), confirms:
 
 ```bash
 grep -rn "hashlib\|sha256\|md5\|integrity\|tamper\|verify\|sign" terrarium/src/
 # Zero cryptographic results across all seven log file types.
 ```
 
-All seven Terrarium artifact types — `tool_calls.json`, `agent_prompts.json`, `blackboard_{id}.txt`, `attack_events.jsonl`, `attack_summary.json`, `attack_events.log`, `experiment_note.txt` — are written with standard `f.write()` / `json.dump()`. Any file can be silently modified by any filesystem-level actor.
+All seven Terrarium artifact types, `tool_calls.json`, `agent_prompts.json`, `blackboard_{id}.txt`, `attack_events.jsonl`, `attack_summary.json`, `attack_events.log`, `experiment_note.txt`, are written with standard `f.write()` / `json.dump()`. Any file can be silently modified by any filesystem-level actor.
 
-### Forensic Gap — Proven on 14 Real Colosseum Runs
+### Forensic Gap: Proven on 14 Real Colosseum Runs
 
-`forensic_gap_proof.py` runs the A3 attack (storage-level deletion) against real Colosseum c2 experiment output — 9 qwen2.5:3b runs (seeds 1–3 × 3 batches) and 5 Claude Sonnet active-collusion runs (seeds 1–5). It replays each run through `ColosseumAuditSession` to produce a sealed Tesserae trace, then deletes the secret-channel events from both the Colosseum `metrics.json` and the sealed JSONL.
+`forensic_gap_proof.py` runs the A3 attack (storage-level deletion) against real Colosseum c2 experiment output, 9 qwen2.5:3b runs (seeds 1–3 × 3 batches) and 5 Claude Sonnet active-collusion runs (seeds 1–5). It replays each run through `ColosseumAuditSession` to produce a sealed Tesserae trace, then deletes the secret-channel events from both the Colosseum `metrics.json` and the sealed JSONL.
 
 ```bash
 python examples/colosseum_adapter/forensic_gap_proof.py
@@ -139,9 +139,9 @@ python examples/colosseum_adapter/forensic_gap_proof.py
   14 runs. Colosseum: 0 detections. Tesserae: 14/14 detected.
 
   Three checks fire on every deletion:
-    [2/6] Sequence integrity — missing sequence numbers
-    [3/6] Hash chain — prev_hash breaks at deletion point
-    [6/6] Merkle root — sealed root no longer matches event set
+    [2/6] Sequence integrity: missing sequence numbers
+    [3/6] Hash chain: prev_hash breaks at deletion point
+    [6/6] Merkle root: sealed root no longer matches event set
 ```
 
 Results are written to `examples/colosseum_adapter/forensic_gap_results.json`.
@@ -155,18 +155,18 @@ python examples/terrarium_adapter/demo_tamper_detection.py
 ```
 
 ```
-Step 2 — Verify original audit record:
+Step 2: Verify original audit record:
   Result:         ✅ PASS
   Evidence class: SIGNED_NON_AUTHORITATIVE_EVIDENCE
 
-Step 4 — Verify tampered record:
+Step 4: Verify tampered record:
   Result:         ❌ FAIL
   Failed check:   [3/6] Hash chain integrity (seq=3)
 ```
 
 ### Colosseum Adapter and Differential Audit
 
-`ColosseumAuditSession` wraps a Colosseum experiment with Tesserae instrumentation. The Colosseum experiment — agents, attack modules, regret computation — requires no modification.
+`ColosseumAuditSession` wraps a Colosseum experiment with Tesserae instrumentation. The Colosseum experiment — agents, attack modules, regret computation, requires no modification.
 
 ```bash
 # PASS → FAIL demonstration
@@ -181,7 +181,7 @@ python examples/colosseum_adapter/forensic_gap_proof.py
 
 ### Zero-Knowledge Differential Audit
 
-The ZK module (`agentops_sdk/zkp_differential.py`) lets an auditor certify that one session's collusion-event count exceeds another's by a stated delta — without revealing raw counts, event types, or payloads. Based on Pedersen commitments over BN128 and a Fiat-Shamir Schnorr proof.
+The ZK module (`agentops_sdk/zkp_differential.py`) lets an auditor certify that one session's collusion-event count exceeds another's by a stated delta, without revealing raw counts, event types, or payloads. Based on Pedersen commitments over BN128 and a Fiat-Shamir Schnorr proof.
 
 ```python
 from agentops_sdk import commit_session_count, prove_differential, verify_differential
@@ -192,12 +192,12 @@ proof = prove_differential(count_a, blinding_a, count_b, blinding_b, delta)
 assert verify_differential(c_a, c_b, delta, proof)
 ```
 
-Proof transcripts differ each run (blinding uses `secrets.randbelow`) — the result is reproducible, not deterministic. Stand-alone demo: `examples/colosseum_adapter/gap3_differential_audit.py`.
+Proof transcripts differ each run (blinding uses `secrets.randbelow`). the result is reproducible, not deterministic. Stand-alone demo: `examples/colosseum_adapter/gap3_differential_audit.py`.
 
 ### Companion Paper
 
-> Shaik Ahamed Sahir. *AgentOps Replay: Tamper-Evident Behavioral Sequence Integrity for Multi-Agent Systems.* arXiv, 2026.
-> [Link — added after arXiv submission]
+> Shaik Ahamed Sahir. *Tessarae: Tamper-Evident Behavioral Sequence Integrity for Multi-Agent Systems.* arXiv, 2026.
+> [Link, added after arXiv submission]
 
 The paper formalizes four gap types in Terrarium (T-1 through T-4), three in Colosseum (C-1 through C-3), four evidence classes with trust assumption tables, five adversary evaluations, LOG_DROP semantics, and the ZK differential audit construction.
 
