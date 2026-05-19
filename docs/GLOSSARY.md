@@ -43,7 +43,7 @@ An SDK-authority event emitted when one or more events are lost due to buffer ov
 
 ## Merkle root
 
-An RFC 6962 Merkle tree root sealed inside the SESSION_END event, serving as a compact cryptographic commitment to the full set of events in the session. The verifier recomputes the Merkle root from the event hashes and compares it against the sealed value. A mismatch (e.g., from event deletion) causes check [6/6] to FAIL. (README §How It Works, §Quickstart)
+An RFC 6962 Merkle tree root computed by the SDK as a compact cryptographic commitment to the full set of events in the session. The verifier recomputes the Merkle root from the event hashes and compares it against the committed value; a mismatch (e.g., from event deletion) causes check [6/6] to FAIL. The CHAIN_SEAL also includes a Merkle commitment on the server side. (README §How It Works, §Quickstart)
 
 ## NON_AUTHORITATIVE_EVIDENCE
 
