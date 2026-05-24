@@ -14,7 +14,7 @@ AgentOps Replay captures every agent action into a tamper evident, hash-chained 
 
 ---
 
-## How It Works
+## How It Works:
 
 ```
 Agent Process (Untrusted)
