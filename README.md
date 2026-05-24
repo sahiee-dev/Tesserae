@@ -2,7 +2,7 @@
 
 **Cryptographic chain-of-custody for AI agent sessions.**
 
-AgentOps Replay captures every agent action into a tamper-evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified, by anyone, at any time, without trusting any vendor, including us.
+AgentOps Replay captures every agent action into a tamper evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified, by anyone, at any time, without trusting any vendor, including us.
 
 ---
 
