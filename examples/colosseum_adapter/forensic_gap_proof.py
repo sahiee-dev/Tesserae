@@ -121,15 +121,22 @@ def analyse_run(run_dir: Path) -> dict:
             f.writelines(tampered_lines)
         tamp_v = _run_verify(tp)
 
+    # Attack on Colosseum side: zero colluder_posts_secret in metrics.json.
+    # Colosseum audit files are plaintext JSON with no integrity protection.
+    # An insider modifies the field directly; no verifier exists to catch it.
+    colosseum_tampered_metrics = {**metrics, "colluder_posts_secret": 0}
+    colosseum_tampered_result = "undetected"
+
     return {
         "run": run_dir.name,
         "colosseum_secret_posts": metrics["colluder_posts_secret"],
+        "colosseum_tampered_secret_posts": colosseum_tampered_metrics["colluder_posts_secret"],
         "colosseum_total_posts": metrics["colluder_posts_total"],
         "secret_blackboard_id": secret_bb_id,
         "tesserae_secret_events": secret_count,
         "tesserae_original_result": orig_v["result"],
         "tesserae_tampered_result": tamp_v["result"],
-        "colosseum_tampered_result": "undetected",
+        "colosseum_tampered_result": colosseum_tampered_result,
     }
 
 

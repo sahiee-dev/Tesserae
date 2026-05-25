@@ -676,11 +676,13 @@ def main() -> None:
         c2 = {"status": "FAIL", "errors": ["skipped"]}
         check_results["sequence"] = c2
 
-    if c1["status"] == "PASS" and c2["status"] == "PASS":
+    if c2["status"] != "PASS":
+        all_errors.extend(c2.get("errors", []))
+
+    if c1["status"] == "PASS":
         c3 = check_hash_chain_integrity(events)
         check_results["hash_chain"] = c3
     else:
-        all_errors.extend(c2.get("errors", []))
         c3 = {"status": "FAIL", "errors": ["skipped"]}
         check_results["hash_chain"] = c3
 
