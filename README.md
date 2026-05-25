@@ -1,5 +1,5 @@
 
-<img width="fill" height="100" alt="b_e_a_a_f_a_b_mp_" src="https://github.com/user-attachments/assets/ef836a3a-84fa-4177-a40d-7546172db126" />
+<img width="1000" height="100" alt="b_e_a_a_f_a_b_mp_" src="https://github.com/user-attachments/assets/ef836a3a-84fa-4177-a40d-7546172db126" />
 # Tesserae
 **Cryptographic chain-of-custody for AI agent sessions.**
 
