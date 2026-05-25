@@ -1,5 +1,6 @@
 
-<img width="1000" height="255" alt="ezgif com-cut" src="https://github.com/user-attachments/assets/33d5e2b5-1553-4c77-bd17-149a3d89c1e4" />
+<img width="1000" height="245" alt="ezgif com-video-to-gif-converter" src="https://github.com/user-attachments/assets/d4b4d2f6-db2a-4492-aafc-c742b49ab5ca" />
+
 
 # Tesserae
 
