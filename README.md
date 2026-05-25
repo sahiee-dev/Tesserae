@@ -1,5 +1,7 @@
-# Tesserae
 
+<img width="400" height="225" alt="b_e_a_a_f_a_b_mp_" src="https://github.com/user-attachments/assets/ef836a3a-84fa-4177-a40d-7546172db126" />
+# Tesserae
+<img width="800" height="283" alt="ezgif com-cut" src="https://github.com/user-attachments/assets/3c2bc29e-974c-46e0-8137-7a2e2c1f87c6" />
 **Cryptographic chain-of-custody for AI agent sessions.**
 
 Tesserae captures every agent action into a tamper evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified, by anyone, at any time, without trusting any vendor, including us.
