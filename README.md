@@ -1,8 +1,8 @@
-# AgentOps Replay
+# Tesserae
 
 **Cryptographic chain-of-custody for AI agent sessions.**
 
-AgentOps Replay captures every agent action into a tamper evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified, by anyone, at any time, without trusting any vendor, including us.
+Tesserae captures every agent action into a tamper evident, hash-chained event log. A zero-dependency verifier proves the sequence was not modified, by anyone, at any time, without trusting any vendor, including us.
 
 ---
 
@@ -45,8 +45,8 @@ Each zone is an independent process. The Verifier shares no code or runtime stat
 ## Quickstart : PASS in 5 minutes
 
 ```bash
-git clone https://github.com/sahiee-dev/Agentops-replay.git
-cd Agentops-replay
+git clone https://github.com/sahiee-dev/Tesserae.git
+cd Tesserae
 pip install -e ".[dev]"
 
 python examples/sdk_demo.py
@@ -54,7 +54,7 @@ agentops-verify session.jsonl
 ```
 
 ```
-AgentOps Replay Verifier v1.0
+Tesserae Verifier v1.0
 ==============================
 File        : session.jsonl
 Session ID  : <uuid>
@@ -246,7 +246,7 @@ The Mexico government breach (December 2025 – February 2026) illustrated this 
 
 **CrowdStrike, Palo Alto, Rubrik** audit their own security tooling — not the customer's application agents. Different problem.
 
-None provide an open, independently verifiable cryptographic proof. AgentOps Replay does.
+None provide an open, independently verifiable cryptographic proof. Tesserae does.
 
 ### Regulatory Position
 
@@ -255,11 +255,11 @@ None provide an open, independently verifiable cryptographic proof. AgentOps Rep
 - **ISO/IEC 42001** — non-repudiation: cryptographic proof that audit logs have not been tampered with.
 - **NIST SP 800-86** — *"Organizations should be prepared to demonstrate the integrity of electronic records."* No mutable log satisfies this without cryptographic proof.
 
-AgentOps Replay's CHAIN_SEAL satisfies ISO 42001 non-repudiation by mathematical definition. The verification is reproducible by any party — auditor, regulator, legal counsel — without access to AgentOps infrastructure. See [`docs/REGULATORY_NOTE.md`](docs/REGULATORY_NOTE.md) for clause-by-clause mapping. Not legal advice.
+Tesserae's CHAIN_SEAL satisfies ISO 42001 non-repudiation by mathematical definition. The verification is reproducible by any party — auditor, regulator, legal counsel — without access to any proprietary infrastructure. See [`docs/REGULATORY_NOTE.md`](docs/REGULATORY_NOTE.md) for clause-by-clause mapping. Not legal advice.
 
 ### vs. Vorlon — Direct Comparison
 
-| | Vorlon Flight Recorder | AgentOps Replay |
+| | Vorlon Flight Recorder | Tesserae |
 |---|---|---|
 | Immutability basis | Product claim (DataMatrix™ proprietary) | Mathematical proof (SHA-256 hash chain) |
 | Independent verifier | None — requires trusting Vorlon | Zero-dependency Python CLI, fully inspectable |
@@ -268,7 +268,7 @@ AgentOps Replay's CHAIN_SEAL satisfies ISO 42001 non-repudiation by mathematical
 | Scope | Cross-app SaaS behavioral trail | Agent's internal event chain, any framework |
 | Self-hosted | No | Yes |
 
-Vorlon tells you which SaaS apps the agent touched. AgentOps Replay proves the agent's own event record wasn't modified.
+Vorlon tells you which SaaS apps the agent touched. Tesserae proves the agent's own event record wasn't modified.
 
 ### Enterprise Roadmap
 
@@ -322,7 +322,7 @@ Evidence: NON_AUTHORITATIVE_EVIDENCE
 | Content stored? | Full conversation transcripts | Hashes only — content never stored |
 | Requires account? | No | No |
 
-OpenClaw does engineering-grade vulnerability management. AgentOps Replay does evidence production. These are complementary, not competing.
+OpenClaw does engineering-grade vulnerability management. Tesserae does evidence production. These are complementary, not competing.
 
 ### Optional: Local Server Mode (AUTHORITATIVE_EVIDENCE)
 
@@ -371,4 +371,3 @@ Apache 2.0 — See [LICENSE](LICENSE)
 
 ---
 
-> **Note on naming:** This project is currently named AgentOps Replay for continuity with a prior published system (Sahir, IEEE 2026) and active external links. A rename to **Tesserae** is planned once link dependencies resolve. The name better reflects the system's actual function — cryptographic chain-of-custody and tamper-evident audit — rather than session replay, which was the focus of the v1 system. GitHub will redirect automatically when the rename happens.
