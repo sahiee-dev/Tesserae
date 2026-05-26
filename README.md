@@ -133,7 +133,7 @@ python examples/colosseum_adapter/forensic_gap_proof.py
 
 ```
   Seed 1 (qwen2.5:3b):
-    Colosseum   colluder_posts_secret=10  → zeroed silently → undetected
+    Colosseum   colluder_posts_secret=10  → zero'ed silently → undetected
     Tesserae    10 events sealed, original: PASS
     Attack on Colosseum metrics.json      → undetected
     Attack on Tesserae sealed trace       → FAIL ← DETECTED
