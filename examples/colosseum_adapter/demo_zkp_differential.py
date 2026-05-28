@@ -55,7 +55,7 @@ def _seal_baseline(output_dir: str) -> str:
     )
     client.record(EventType.LLM_CALL, {
         "model_id": "colosseum-agent",
-        "prompt_hash": "a1b2c3d4e5f6" * 5,
+        "prompt_hash": "a1b2c3d4e5f6" * 6,
     })
     client.record(EventType.LLM_RESPONSE, {
         "content_hash": "f6e5d4c3b2a1" * 5,
